@@ -17,10 +17,9 @@ import static java.util.Arrays.asList;
 /**
  * User: rafal.hotlos
  * Date: 14/11/13
- * Time: 21:52
+ * Time: 22:36
  */
-public class MinimaxPlayer extends SampleGamer {
-
+public class AlphaBetaPlayer extends SampleGamer {
     @Override
     public Move stateMachineSelectMove(long timeout)
             throws TransitionDefinitionException, MoveDefinitionException,
@@ -45,7 +44,7 @@ public class MinimaxPlayer extends SampleGamer {
         Move action = legalMoves.get(0);
         int score = 0;
         for (Move move : legalMoves) {
-            int result = minScore(move, state);
+            int result = minScore(move, state, 0, 100);
             if (result > score) {
                 score = result;
                 action = move;
@@ -54,35 +53,35 @@ public class MinimaxPlayer extends SampleGamer {
         return action;
     }
 
-    private int minScore(Move action, MachineState state) throws MoveDefinitionException, TransitionDefinitionException, GoalDefinitionException {
+    private int minScore(Move action, MachineState state, int alpha, int beta) throws MoveDefinitionException, TransitionDefinitionException, GoalDefinitionException {
         StateMachine stateMachine = getStateMachine();
         List<Move> oponentMoves = stateMachine.getLegalMoves(state, getOponent());
-        int score = 100;
         for (Move oponentMove : oponentMoves) {
             MachineState newState = stateMachine.getNextState(state, getMovesForNextState(action, oponentMove));
-            int result = maxScore(newState);
-            if (result < score) {
-                score = result;
+            int maxVal = maxScore(newState, alpha, beta);
+            beta = Math.min(beta, maxVal);
+            if (beta <= alpha) {
+                return alpha;
             }
         }
-        return score;
+        return beta;
     }
 
-    private int maxScore(MachineState state) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
+    private int maxScore(MachineState state, int alpha, int beta) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
         StateMachine stateMachine = getStateMachine();
         if (stateMachine.isTerminal(state)) {
             return stateMachine.getGoal(state, getRole());
         }
         List<Move> legalMoves = stateMachine.getLegalMoves(state, getRole());
-        int score = 0;
         for (Move move : legalMoves) {
-            int result = minScore(move, state);
-            if (result > score) {
-                score = result;
+            int minVal = minScore(move, state, alpha, beta);
+            alpha = Math.max(alpha, minVal);
+            if (alpha >= beta) {
+                return beta;
             }
 
         }
-        return score;
+        return alpha;
     }
 
     private List<Move> getMovesForNextState(Move myMove, Move oponentMove) {
@@ -105,4 +104,5 @@ public class MinimaxPlayer extends SampleGamer {
         }
         throw new IllegalArgumentException("no oponent for role " + getRoleName());
     }
+
 }
