@@ -24,6 +24,10 @@ public class MCTSPlayer extends SampleGamer {
 
     private long finishBy;
 
+    private static enum TYPE {
+        MAX, MIN;
+    }
+
 
     @Override
     public Move stateMachineSelectMove(long timeout)
@@ -32,32 +36,46 @@ public class MCTSPlayer extends SampleGamer {
 
         long start = System.currentTimeMillis();
 
-        finishBy = timeout - 1000;
-//        finishBy = start + 200;
-
-        Node root = new Node(getCurrentState(), null, null);
-
-        while (System.currentTimeMillis() < finishBy) {
-//        while (root.visits < 100) {
-            // selection
-            Node selectedNode = select(root);
-            System.out.printf("selected: %s\n", selectedNode);
-            // expansion
-            Node expandedNode = expand(selectedNode);
-//            System.out.printf("expanded: %s\n", expandedNode);
-            // simulation
-            int score = simulateFrom(selectedNode);
-            System.out.printf("score: %s\n", score);
-            // backpropagation
-            selectedNode.backpropagate(score);
-        }
-
-
-        Move selection = bestMove(root);
-
-        long stop = System.currentTimeMillis();
         List<Move> moves = getStateMachine().getLegalMoves(getCurrentState(),
                 getRole());
+
+        Move selection = null;
+
+        if (moves.size() == 1) {
+            selection = moves.get(0);
+        } else {
+
+
+            finishBy = timeout - 1000;
+//        finishBy = start + 2000;
+
+            Node root = new Node(getCurrentState(), null, null, TYPE.MAX);
+
+            while (System.currentTimeMillis() < finishBy) {
+//        while (root.visits < 100) {
+                // selection
+                Node selectedNode = select(root);
+                if (selectedNode.toString().length() < 20) {
+                    System.out.printf("selected: %s\n", selectedNode);
+                } else  {
+//                System.out.print('.');
+                }
+                // expansion
+                expand(selectedNode);
+//            System.out.printf("expanded: %s\n", expandedNode);
+                // simulation
+
+                int score = simulateFrom(selectedNode);
+//            System.out.printf("score: %s\n", score);
+                // backpropagation
+                selectedNode.backpropagate(score);
+            }
+
+            selection = bestMove(root);
+        }
+
+        long stop = System.currentTimeMillis();
+
         notifyObservers(new GamerSelectedMoveEvent(moves, selection, stop
                 - start));
         return selection;
@@ -76,36 +94,52 @@ public class MCTSPlayer extends SampleGamer {
             return node;
         }
 
-        double score = 0;
+        double score = node.type == TYPE.MAX ? 0 : 100000;
         Node result = node;
 
         for (Node child : node.children) {
             double newScore = child.selectfn();
-            if (newScore > score) {
-                score = newScore;
-                result = child;
+//            System.out.println("score: " + newScore);
+            if (node.type == TYPE.MAX) {
+                if (newScore >= score) {
+                    score = newScore;
+                    result = child;
+                }
+            } else {
+                if (newScore < score) {
+                    score = newScore;
+                    result = child;
+                }
             }
         }
-//        System.out.println("selected score: " + score);
+//        System.out.println("subselecting from: " + result);
         return select(result);
     }
 
-    private Node expand(Node node) throws MoveDefinitionException, TransitionDefinitionException {
+    private void expand(Node node) throws MoveDefinitionException, TransitionDefinitionException {
         StateMachine stateMachine = getStateMachine();
 
         if (stateMachine.isTerminal(node.state)) {
-            return node;
-        }
-        List<Move> legalMoves = stateMachine.getLegalMoves(node.state, getRole());
-//        List<List<Move>> legalJointMoves = stateMachine.getLegalJointMoves(state, getRole(), action);
-
-        for (Move legalMove : legalMoves) {
-            MachineState newState = stateMachine.getNextState(node.state, asList(legalMove));
-            Node newNode = new Node(newState, legalMove, node);
-            node.children.add(newNode);
+            return;
         }
 
-        return node.children.get(0);
+        if (node.type == TYPE.MAX) {
+            List<Move> myMoves = stateMachine.getLegalMoves(node.state, getRole());
+//            System.out.println("adding nodes " + myMoves.size());
+            for (Move myMove : myMoves) {
+                Node newMinNode = new Node(node.state, asList(myMove), node, TYPE.MIN);
+                node.children.add(newMinNode);
+            }
+        } else {
+            List<List<Move>> jointMoves = stateMachine.getLegalJointMoves(node.state, getRole(), node.moves.get(0));
+//            System.out.println("adding nodes " + jointMoves.size());
+            for (List<Move> jointMove : jointMoves) {
+                MachineState newState = stateMachine.getNextState(node.state, jointMove);
+                Node newMaxNode = new Node(newState, jointMove, node, TYPE.MAX);
+                node.children.add(newMaxNode);
+            }
+        }
+//        return node.children.get(0).children.get(0);
     }
 
     private int simulateFrom(Node node) throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
@@ -113,16 +147,16 @@ public class MCTSPlayer extends SampleGamer {
 
         if (stateMachine.isTerminal(node.state)) {
             int goal = stateMachine.getGoal(node.state, getRole());
-            System.out.printf("instead of simulation returning goal=%s (state is terminal)\n", goal);
+//            System.out.printf("instead of simulation returning goal=%s (state is terminal)\n", goal);
             return goal;
         }
 
-        long simulateStart = System.currentTimeMillis();
+//        long simulateStart = System.currentTimeMillis();
         int[] depthChargeResult = new int[1];
         MachineState finalState = stateMachine.performDepthCharge(node.state, depthChargeResult);
         int goal = stateMachine.getGoal(finalState, getRole());
-        long simulateTime = System.currentTimeMillis() - simulateStart;
-        System.out.printf("simulation done in %s millis\n", simulateTime);
+//        long simulateTime = System.currentTimeMillis() - simulateStart;
+//        System.out.printf("simulation done in %s millis\n", simulateTime);
         return goal;
     }
 
@@ -134,7 +168,7 @@ public class MCTSPlayer extends SampleGamer {
             System.out.printf("  best move child visits/utility = %s/%s\n", child.visits, child.utility);
             if (child.visits > maxVisits) {
                 maxVisits = child.visits;
-                result = child.move;
+                result = child.moves.get(0);
             }
         }
         System.out.println("best move finished");
@@ -143,8 +177,9 @@ public class MCTSPlayer extends SampleGamer {
 
 
     private static class Node {
+        public final TYPE type;
         public MachineState state;
-        public Move move;
+        public List<Move> moves;
         public int visits = 0;
         public int utility = 0;
         public Node parent;
@@ -152,10 +187,11 @@ public class MCTSPlayer extends SampleGamer {
 
         public String description;
 
-        private Node(MachineState state, Move move, Node parent) {
+        private Node(MachineState state, List<Move> moves, Node parent, TYPE type) {
             this.state = state;
-            this.move = move;
+            this.moves = moves;
             this.parent = parent;
+            this.type = type;
 
             if (parent == null) {
                 this.description = "root";
