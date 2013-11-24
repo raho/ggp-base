@@ -10,7 +10,6 @@ import org.ggp.base.util.statemachine.exceptions.MoveDefinitionException;
 import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static java.lang.Math.*;
@@ -34,6 +33,7 @@ public class MCTSPlayer extends SampleGamer {
         long start = System.currentTimeMillis();
 
         finishBy = timeout - 1000;
+//        finishBy = start + 200;
 
         Node root = new Node(getCurrentState(), null, null);
 
@@ -44,12 +44,12 @@ public class MCTSPlayer extends SampleGamer {
             System.out.printf("selected: %s\n", selectedNode);
             // expansion
             Node expandedNode = expand(selectedNode);
-            System.out.printf("expanded: %s\n", expandedNode);
+//            System.out.printf("expanded: %s\n", expandedNode);
             // simulation
-            int score = simulateFrom(expandedNode);
+            int score = simulateFrom(selectedNode);
             System.out.printf("score: %s\n", score);
             // backpropagation
-            expandedNode.backpropagate(score);
+            selectedNode.backpropagate(score);
         }
 
 
@@ -76,16 +76,17 @@ public class MCTSPlayer extends SampleGamer {
             return node;
         }
 
-        int score = 0;
+        double score = 0;
         Node result = node;
 
         for (Node child : node.children) {
-            int newScore = child.selectfn();
+            double newScore = child.selectfn();
             if (newScore > score) {
                 score = newScore;
                 result = child;
             }
         }
+//        System.out.println("selected score: " + score);
         return select(result);
     }
 
@@ -112,7 +113,7 @@ public class MCTSPlayer extends SampleGamer {
 
         if (stateMachine.isTerminal(node.state)) {
             int goal = stateMachine.getGoal(node.state, getRole());
-            System.out.printf("instead of simulation returning goal=%s (state is terminal)", goal);
+            System.out.printf("instead of simulation returning goal=%s (state is terminal)\n", goal);
             return goal;
         }
 
@@ -130,7 +131,7 @@ public class MCTSPlayer extends SampleGamer {
         int maxVisits = 0;
         Move result = null;
         for (Node child : node.children) {
-            System.out.printf("  best move child visits/utility = %s/%s", child.visits, child.utility);
+            System.out.printf("  best move child visits/utility = %s/%s\n", child.visits, child.utility);
             if (child.visits > maxVisits) {
                 maxVisits = child.visits;
                 result = child.move;
@@ -149,7 +150,6 @@ public class MCTSPlayer extends SampleGamer {
         public Node parent;
         public List<Node> children = new ArrayList<Node>();
 
-        public int depth = 0;
         public String description;
 
         private Node(MachineState state, Move move, Node parent) {
@@ -157,18 +157,17 @@ public class MCTSPlayer extends SampleGamer {
             this.move = move;
             this.parent = parent;
 
-            int pos = 0;
-            if (parent != null) {
-                pos = parent.children.size();
-                depth = parent.depth + 1;
+            if (parent == null) {
+                this.description = "root";
+            } else {
+                this.description = parent.description + ":" + parent.children.size();
             }
-            this.description = String.format("depth:%s,pos:%s", depth, pos);
         }
 
-        public int selectfn() {
-            int result = utility;
+        public double selectfn() {
+            double result = utility/visits;
             if (parent != null) {
-                result += sqrt(log(parent.visits) / visits);
+                result += sqrt(2*log(parent.visits) / visits);
             }
             return result;
         }
